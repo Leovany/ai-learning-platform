@@ -46,6 +46,7 @@ public class QuizService {
         }
 
         int count = resolveQuestionCount(request.getQuestionCount());
+        validateDifficulty(request.getDifficulty());
 
         Quiz quiz = new Quiz();
         quiz.setDocumentId(doc.getId());
@@ -55,7 +56,7 @@ public class QuizService {
         quiz = quizRepository.save(quiz);
 
         try {
-            List<LlmGeneratedQuestion> generated = callLlmWithRetry(doc, count);
+            List<LlmGeneratedQuestion> generated = callLlmWithRetry(doc, count, request.getDifficulty());
             saveQuestions(quiz.getId(), doc, generated);
             quiz.setQuestionCount(generated.size());
             quiz.setStatus(QuizStatus.READY);
@@ -188,9 +189,9 @@ public class QuizService {
                 .toList();
     }
 
-    private List<LlmGeneratedQuestion> callLlmWithRetry(LearningDocument doc, int count) {
+    private List<LlmGeneratedQuestion> callLlmWithRetry(LearningDocument doc, int count, String difficulty) {
         String systemPrompt = buildSystemPrompt();
-        String userPrompt = buildUserPrompt(doc, count);
+        String userPrompt = buildUserPrompt(doc, count, difficulty);
         BusinessException lastError = null;
         for (int i = 0; i < MAX_LLM_RETRIES; i++) {
             try {
@@ -352,6 +353,16 @@ public class QuizService {
                 .orElseThrow(() -> BusinessException.notFound("试卷不存在"));
     }
 
+    private void validateDifficulty(String difficulty) {
+        if (difficulty == null || difficulty.isBlank()) {
+            return;
+        }
+        String d = difficulty.toLowerCase(Locale.ROOT);
+        if (!Set.of("easy", "medium", "hard").contains(d)) {
+            throw BusinessException.badRequest("难度只能是 easy、medium 或 hard");
+        }
+    }
+
     private int resolveQuestionCount(Integer requested) {
         int count = requested == null ? appProperties.getQuiz().getDefaultCount() : requested;
         int max = appProperties.getQuiz().getMaxCount();
@@ -386,7 +397,7 @@ public class QuizService {
                 """;
     }
 
-    private String buildUserPrompt(LearningDocument doc, int count) {
+    private String buildUserPrompt(LearningDocument doc, int count, String difficulty) {
         List<PageText> pages = documentPageService.loadPages(doc);
         String body;
         if (!pages.isEmpty()) {
@@ -412,6 +423,20 @@ public class QuizService {
                 body = body.substring(0, TEXT_MAX_LENGTH) + "\n…（后续内容已截断）";
             }
         }
-        return "文档名称：" + doc.getFileName() + "\n请根据以下学习材料生成 " + count + " 道选择题：\n\n" + body;
+        String diffHint = resolveDifficultyHint(difficulty);
+        return "文档名称：" + doc.getFileName()
+                + "\n难度要求：" + diffHint
+                + "\n请根据以下学习材料生成 " + count + " 道选择题：\n\n" + body;
+    }
+
+    private String resolveDifficultyHint(String difficulty) {
+        if (difficulty == null || difficulty.isBlank()) {
+            return "中等（概念理解与应用）";
+        }
+        return switch (difficulty.toLowerCase(Locale.ROOT)) {
+            case "easy" -> "简单（基础概念与记忆）";
+            case "hard" -> "困难（综合分析与易混淆点辨析）";
+            default -> "中等（概念理解与应用）";
+        };
     }
 }

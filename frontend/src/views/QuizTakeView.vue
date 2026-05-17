@@ -137,5 +137,12 @@ async function onSubmit() {
   margin-top: 32px;
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .stem {
+    font-size: 15px;
+  }
 }
 </style>

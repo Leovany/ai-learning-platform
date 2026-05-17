@@ -2,7 +2,7 @@
 
 > 配套文档：[README.md](./README.md)（需求说明）  
 > 预估总工期：**3～4 周**（单人全职；兼职可 ×1.5～2）  
-> 当前阶段：**Phase 4 — Docker 部署联调**（Phase 0～3 已完成）
+> 当前阶段：**Phase 5 — 测试与 MVP 验收**（Phase 0～4 已完成）
 
 ---
 
@@ -41,9 +41,9 @@
 
 ### 2.3 验收标准
 
-- [ ] 后端 `mvn spring-boot:run` 启动成功，健康检查 `GET /actuator/health` 返回 200
-- [ ] 前端 `npm run dev` 可访问空白布局页
-- [ ] Git 仓库结构符合 README 目录规划
+- [x] 后端 `mvn spring-boot:run` 启动成功，健康检查 `GET /actuator/health` 返回 200
+- [x] 前端 `npm run dev` 可访问空白布局页
+- [x] Git 仓库结构符合 README 目录规划
 
 ---
 

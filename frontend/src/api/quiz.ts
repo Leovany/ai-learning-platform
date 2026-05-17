@@ -33,6 +33,16 @@ export interface QuizVO {
   questions?: QuestionVO[]
 }
 
+export interface QuizAttemptVO {
+  id: number
+  quizId: number
+  score: number
+  total: number
+  submittedAt: string
+}
+
+export type QuizDifficulty = 'easy' | 'medium' | 'hard'
+
 export interface SubmitQuizResult {
   attemptId: number
   quizId: number
@@ -54,10 +64,18 @@ export function getQuiz(id: number, includeAnswers = false) {
   )
 }
 
-export function generateQuiz(documentId: number, questionCount?: number) {
+export function generateQuiz(
+  documentId: number,
+  questionCount?: number,
+  difficulty?: QuizDifficulty,
+) {
   return getData<QuizVO>(
-    request.post('/quizzes/generate', { documentId, questionCount }),
+    request.post('/quizzes/generate', { documentId, questionCount, difficulty }),
   )
+}
+
+export function listQuizAttempts(quizId: number) {
+  return getData<QuizAttemptVO[]>(request.get(`/quizzes/${quizId}/attempts`))
 }
 
 export function deleteQuiz(id: number) {

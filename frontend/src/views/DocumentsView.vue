@@ -96,6 +96,13 @@
         <el-form-item label="题目数量">
           <el-input-number v-model="questionCount" :min="1" :max="30" />
         </el-form-item>
+        <el-form-item label="难度">
+          <el-select v-model="difficulty" style="width: 100%">
+            <el-option label="简单" value="easy" />
+            <el-option label="中等" value="medium" />
+            <el-option label="困难" value="hard" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <p class="gen-tip">将调用大模型生成选择题，请确保已在 .env 中配置 ZHIPU_API_KEY 或 DEEPSEEK_API_KEY</p>
       <template #footer>
@@ -121,7 +128,7 @@ import {
   statusType,
   type DocumentVO,
 } from '@/api/document'
-import { generateQuiz } from '@/api/quiz'
+import { generateQuiz, type QuizDifficulty } from '@/api/quiz'
 
 const router = useRouter()
 const loading = ref(false)
@@ -137,6 +144,7 @@ const reparsing = ref(false)
 const generateVisible = ref(false)
 const generateDoc = ref<DocumentVO | null>(null)
 const questionCount = ref(10)
+const difficulty = ref<QuizDifficulty>('medium')
 const generating = ref(false)
 
 function formatTime(iso: string) {
@@ -208,7 +216,11 @@ async function confirmGenerate() {
   if (!generateDoc.value) return
   generating.value = true
   try {
-    const quiz = await generateQuiz(generateDoc.value.id, questionCount.value)
+    const quiz = await generateQuiz(
+      generateDoc.value.id,
+      questionCount.value,
+      difficulty.value,
+    )
     generateVisible.value = false
     ElMessage.success('考题生成成功')
     router.push(`/quizzes/${quiz.id}/take`)

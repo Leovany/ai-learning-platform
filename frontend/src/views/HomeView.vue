@@ -11,20 +11,73 @@
         <el-icon><Upload /></el-icon>
         上传 PDF
       </el-button>
+      <el-button @click="$router.push('/documents')">
+        <el-icon><Document /></el-icon>
+        学习文档
+      </el-button>
       <el-button @click="$router.push('/quizzes')">
         <el-icon><EditPen /></el-icon>
-        查看试卷
+        试卷题库
       </el-button>
     </el-space>
+
     <el-divider />
-    <el-descriptions title="开发进度" :column="1" border>
-      <el-descriptions-item label="Phase 0">项目脚手架</el-descriptions-item>
-      <el-descriptions-item label="Phase 1">PDF 上传与解析</el-descriptions-item>
-      <el-descriptions-item label="Phase 2">AI 智能出题</el-descriptions-item>
-      <el-descriptions-item label="Phase 3">在线答题与成绩（当前）</el-descriptions-item>
+
+    <el-descriptions title="系统状态" :column="1" border v-loading="llmLoading">
+      <el-descriptions-item label="后端">
+        <el-tag v-if="appStore.backendOnline === true" type="success" size="small">已连接</el-tag>
+        <el-tag v-else-if="appStore.backendOnline === false" type="danger" size="small">未连接</el-tag>
+        <el-tag v-else type="info" size="small">检测中</el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item v-if="llmConfig" label="大模型">
+        {{ llmProviderLabel(llmConfig.provider) }} · {{ llmConfig.model }}
+      </el-descriptions-item>
+    </el-descriptions>
+
+    <el-divider />
+
+    <el-descriptions title="功能模块" :column="1" border>
+      <el-descriptions-item label="文档">PDF 上传、解析、按页预览</el-descriptions-item>
+      <el-descriptions-item label="出题">智谱 / DeepSeek 多模型，可选难度与题数</el-descriptions-item>
+      <el-descriptions-item label="练习">在线答题、成绩统计、错题解析与 PDF 定位</el-descriptions-item>
     </el-descriptions>
   </el-card>
 </template>
+
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useAppStore } from '@/stores/app'
+import { getLlmConfig, type LlmConfigVO } from '@/api/llm'
+
+const appStore = useAppStore()
+const llmLoading = ref(false)
+const llmConfig = ref<LlmConfigVO | null>(null)
+
+function llmProviderLabel(provider: string) {
+  const map: Record<string, string> = {
+    zhipu: '智谱 AI',
+    deepseek: 'DeepSeek',
+  }
+  return map[provider] || provider
+}
+
+async function loadLlmConfig() {
+  if (appStore.backendOnline !== true) return
+  llmLoading.value = true
+  try {
+    llmConfig.value = await getLlmConfig()
+  } catch {
+    llmConfig.value = null
+  } finally {
+    llmLoading.value = false
+  }
+}
+
+onMounted(async () => {
+  await appStore.checkBackend()
+  await loadLlmConfig()
+})
+</script>
 
 <style scoped>
 .desc {

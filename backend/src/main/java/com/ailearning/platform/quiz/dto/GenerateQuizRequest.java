@@ -10,4 +10,7 @@ public class GenerateQuizRequest {
     private Long documentId;
 
     private Integer questionCount;
+
+    /** 难度：easy | medium | hard，默认 medium */
+    private String difficulty;
 }

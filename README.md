@@ -346,15 +346,36 @@ QUIZ_DEFAULT_COUNT=10
 ### 8.3 启动命令
 
 ```bash
+# 推荐：自动检查 .env 并启动
+./scripts/start.sh
+
+# 或手动
 docker compose up -d --build
 ```
 
 访问：`http://localhost`（前端），API：`http://localhost/api`。
 
-### 8.4 本地开发快速开始
+### 8.4 云服务器部署（CentOS 8）
 
 ```bash
-# 1. 配置 LLM API Key
+sudo dnf install -y yum-utils git curl
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io
+sudo systemctl enable --now docker
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-$(uname -s)-$(uname -m)" \
+  -o /usr/local/bin/docker-compose && sudo chmod +x /usr/local/bin/docker-compose
+
+git clone https://github.com/Leovany/ai-learning-platform.git
+cd ai-learning-platform && cp .env.example .env && vi .env
+docker-compose up -d --build
+```
+
+云安全组放行 **80**；完整说明（vault 源、firewalld、HTTPS）见 [docs/deploy-centos8.md](docs/deploy-centos8.md)。
+
+### 8.5 本地开发快速开始
+
+```bash
+# 1. 配置 LLM API Key（本地）
 cp .env.example .env
 # 编辑 .env，填入智谱 API Key（https://bigmodel.cn/usercenter/proj-mgmt/apikeys）
 
@@ -385,12 +406,19 @@ npm install && npm run dev
 
 ## 10. 验收标准（MVP）
 
-- [ ] 可上传 PDF 并在列表中看到解析状态
-- [ ] 可基于已解析文档一键生成至少 5 道选择题
-- [ ] 题目包含题干、四选项、正确答案与解析
-- [ ] 可完成整卷答题并显示得分与错题解析
-- [ ] `docker compose up` 后前后端可正常访问
-- [ ] 重启容器后数据（SQLite、上传文件）不丢失
+- [x] 可上传 PDF 并在列表中看到解析状态
+- [x] 可基于已解析文档一键生成至少 5 道选择题（可选难度 easy/medium/hard）
+- [x] 题目包含题干、四选项、正确答案与解析
+- [x] 可完成整卷答题并显示得分与错题解析
+- [x] `docker compose up` / `scripts/start.sh` 后前后端可正常访问
+- [x] 重启容器后数据（SQLite、上传文件）不丢失
+
+一键 Docker 启动：
+
+```bash
+cp .env.example .env   # 填入 API Key
+./scripts/start.sh
+```
 
 ---
 

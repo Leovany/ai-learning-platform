@@ -89,5 +89,27 @@ onMounted(() => {
 }
 .main {
   background: #f5f7fa;
+  padding: 16px;
+}
+
+@media (max-width: 768px) {
+  .layout {
+    flex-direction: column;
+  }
+  .aside {
+    width: 100% !important;
+  }
+  .logo span {
+    font-size: 14px;
+  }
+  .header {
+    padding: 0 12px;
+  }
+  .page-title {
+    font-size: 16px;
+  }
+  .main {
+    padding: 12px;
+  }
 }
 </style>

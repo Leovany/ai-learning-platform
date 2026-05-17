@@ -2,6 +2,8 @@ services:
   backend:
     build: ./backend
     container_name: ai-learning-backend
+    env_file:
+      - .env
     environment:
       APP_DATA_DIR: /app/data
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
