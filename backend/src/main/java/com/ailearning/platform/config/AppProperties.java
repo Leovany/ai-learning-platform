@@ -16,9 +16,19 @@ public class AppProperties {
 
     @Data
     public static class Llm {
-        private String apiBase = "https://api.openai.com/v1";
+        /** 当前提供商：zhipu | deepseek | auto（根据 LLM_MODEL 自动推断） */
+        private String provider = "auto";
+        /** 指定模型名；不填则使用对应提供商的 default-model */
+        private String model = "";
+        private ProviderConfig zhipu = new ProviderConfig();
+        private ProviderConfig deepseek = new ProviderConfig();
+    }
+
+    @Data
+    public static class ProviderConfig {
+        private String apiBase = "";
         private String apiKey = "";
-        private String model = "gpt-4o-mini";
+        private String defaultModel = "";
     }
 
     @Data

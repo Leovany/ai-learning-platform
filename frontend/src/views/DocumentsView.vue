@@ -97,7 +97,7 @@
           <el-input-number v-model="questionCount" :min="1" :max="30" />
         </el-form-item>
       </el-form>
-      <p class="gen-tip">将调用大模型生成选择题，请确保已配置 LLM_API_KEY</p>
+      <p class="gen-tip">将调用大模型生成选择题，请确保已在 .env 中配置 ZHIPU_API_KEY 或 DEEPSEEK_API_KEY</p>
       <template #footer>
         <el-button :disabled="generating" @click="generateVisible = false">取消</el-button>
         <el-button type="primary" :loading="generating" @click="confirmGenerate">开始生成</el-button>

@@ -22,7 +22,27 @@
 
       <el-divider />
 
-      <div v-for="q in result.questions" :key="q.id" class="question-review">
+      <el-tabs v-model="activeTab" class="result-tabs" @tab-change="onTabChange">
+        <el-tab-pane name="wrong">
+          <template #label>
+            <span>错题</span>
+            <el-badge :value="wrongQuestions.length" :max="99" class="tab-badge" type="danger" />
+          </template>
+        </el-tab-pane>
+        <el-tab-pane name="correct">
+          <template #label>
+            <span>正确</span>
+            <el-badge :value="correctQuestions.length" :max="99" class="tab-badge" type="success" />
+          </template>
+        </el-tab-pane>
+      </el-tabs>
+
+      <el-empty
+        v-if="displayedQuestions.length === 0"
+        :description="activeTab === 'wrong' ? '全部答对，没有错题' : '暂无答对的题目'"
+      />
+
+      <div v-for="q in displayedQuestions" :key="q.id" class="question-review">
         <div class="review-header">
           <span>{{ q.sortOrder }}. {{ q.stem }}</span>
           <el-tag :type="q.isCorrect ? 'success' : 'danger'" size="small">
@@ -88,7 +108,7 @@
       </div>
 
       <div class="footer-actions">
-        <el-button type="primary" @click="$router.push('/quizzes')">返回试卷列表</el-button>
+        <el-button type="primary" @click="$router.push('/quizzes')">返回试卷题库</el-button>
         <el-button @click="$router.push(`/quizzes/${quizId}/take`)">再答一次</el-button>
       </div>
     </template>
@@ -128,6 +148,7 @@ const pageDrawerTitle = ref('')
 const pageData = ref<DocumentPageVO | null>(null)
 const loadingPage = ref<number | null>(null)
 const expandedNames = ref<string[]>([])
+const activeTab = ref<'wrong' | 'correct'>('wrong')
 
 const beforeHighlight = computed(() => {
   const d = pageData.value
@@ -145,11 +166,25 @@ const afterHighlight = computed(() => {
   return d.text.slice(d.highlightEnd)
 })
 
-function initExpandedNames() {
-  if (!result.value?.questions) return
-  expandedNames.value = result.value.questions
+const wrongQuestions = computed(() =>
+  result.value?.questions.filter((q) => !q.isCorrect) ?? [],
+)
+const correctQuestions = computed(() =>
+  result.value?.questions.filter((q) => q.isCorrect) ?? [],
+)
+const displayedQuestions = computed(() =>
+  activeTab.value === 'wrong' ? wrongQuestions.value : correctQuestions.value,
+)
+
+function initExpandedNames(questions: QuestionVO[]) {
+  expandedNames.value = questions
     .filter((q) => q.explanation || q.sourcePage)
     .map((q) => String(q.id))
+}
+
+function onTabChange(tab: string | number) {
+  const questions = tab === 'wrong' ? wrongQuestions.value : correctQuestions.value
+  initExpandedNames(questions)
 }
 
 onMounted(() => {
@@ -157,7 +192,8 @@ onMounted(() => {
     router.replace('/quizzes')
     return
   }
-  initExpandedNames()
+  activeTab.value = 'wrong'
+  initExpandedNames(wrongQuestions.value)
 })
 
 const percentage = computed(() => {
@@ -239,6 +275,12 @@ async function viewPdfPage(q: QuestionVO) {
 }
 .score-label {
   color: #909399;
+}
+.result-tabs {
+  margin-bottom: 16px;
+}
+.tab-badge {
+  margin-left: 6px;
 }
 .question-review {
   margin-bottom: 24px;

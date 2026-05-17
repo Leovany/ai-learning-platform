@@ -16,17 +16,17 @@
           <el-icon><HomeFilled /></el-icon>
           <span>首页</span>
         </el-menu-item>
-        <el-menu-item index="/documents">
-          <el-icon><Document /></el-icon>
-          <span>学习文档</span>
-        </el-menu-item>
         <el-menu-item index="/documents/upload">
           <el-icon><Upload /></el-icon>
           <span>上传 PDF</span>
         </el-menu-item>
+        <el-menu-item index="/documents">
+          <el-icon><Document /></el-icon>
+          <span>学习文档</span>
+        </el-menu-item>
         <el-menu-item index="/quizzes">
           <el-icon><EditPen /></el-icon>
-          <span>试卷列表</span>
+          <span>试卷题库</span>
         </el-menu-item>
       </el-menu>
     </el-aside>

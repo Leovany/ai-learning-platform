@@ -25,7 +25,7 @@ const router = createRouter({
       path: '/quizzes',
       name: 'quizzes',
       component: () => import('@/views/QuizzesView.vue'),
-      meta: { title: '试卷列表' },
+      meta: { title: '试卷题库' },
     },
     {
       path: '/quizzes/:id/take',

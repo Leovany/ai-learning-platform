@@ -1,7 +1,6 @@
 package com.ailearning.platform.quiz.llm;
 
 import com.ailearning.platform.common.BusinessException;
-import com.ailearning.platform.config.AppProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -20,19 +19,17 @@ import java.util.Map;
 public class LlmClient {
 
     private final RestTemplate restTemplate;
-    private final AppProperties appProperties;
+    private final LlmConfigResolver llmConfigResolver;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public String chat(String systemPrompt, String userPrompt) {
-        String apiKey = appProperties.getLlm().getApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new BusinessException(503, "未配置 LLM_API_KEY，请在环境变量或 .env 中设置");
-        }
+        LlmConfigResolver.ResolvedLlm llm = llmConfigResolver.resolve();
+        log.info("LLM request: provider={}, model={}", llm.providerId(), llm.model());
 
-        String url = normalizeBaseUrl(appProperties.getLlm().getApiBase()) + "/chat/completions";
+        String url = llm.apiBase() + "/chat/completions";
 
         Map<String, Object> body = Map.of(
-                "model", appProperties.getLlm().getModel(),
+                "model", llm.model(),
                 "temperature", 0.7,
                 "response_format", Map.of("type", "json_object"),
                 "messages", List.of(
@@ -43,7 +40,7 @@ public class LlmClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(apiKey);
+        headers.setBearerAuth(llm.apiKey());
 
         try {
             ResponseEntity<String> response = restTemplate.exchange(
@@ -64,23 +61,11 @@ public class LlmClient {
         } catch (BusinessException e) {
             throw e;
         } catch (RestClientException e) {
-            log.error("LLM request failed", e);
-            throw new BusinessException(503, "调用 LLM 失败: " + e.getMessage());
+            log.error("LLM request failed, provider={}", llm.providerId(), e);
+            throw new BusinessException(503, "调用 " + llm.providerId() + " 失败: " + e.getMessage());
         } catch (Exception e) {
             log.error("LLM response parse failed", e);
             throw new BusinessException(503, "解析 LLM 响应失败: " + e.getMessage());
         }
-    }
-
-    private String normalizeBaseUrl(String base) {
-        if (base == null || base.isBlank()) {
-            return "https://api.deepseek.com";
-        }
-        String normalized = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
-        // 兼容误配 /v1 后缀（官方 base_url 为 https://api.deepseek.com）
-        if (normalized.endsWith("/v1")) {
-            normalized = normalized.substring(0, normalized.length() - 3);
-        }
-        return normalized;
     }
 }

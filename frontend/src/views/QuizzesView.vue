@@ -1,7 +1,7 @@
 <template>
   <el-card shadow="never" v-loading="loading">
     <template #header>
-      <span>试卷列表</span>
+      <span>试卷题库</span>
     </template>
 
     <el-empty v-if="!loading && quizzes.length === 0" description="暂无试卷，请先从文档生成考题" />

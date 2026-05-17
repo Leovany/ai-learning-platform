@@ -34,7 +34,7 @@
 | F-01 | PDF 上传 | 支持 `.pdf` 文件上传，单文件大小上限可配置（默认 20MB） | P0 |
 | F-02 | PDF 解析 | 提取文本内容（含分页、段落结构），存储解析结果 | P0 |
 | F-03 | 智能出题 | 基于解析文本调用 LLM，生成 N 道选择题（题干 + 4 选项 + 正确答案 + 解析） | P0 |
-| F-04 | 试卷管理 | 查看已生成试卷列表、详情、删除 | P0 |
+| F-04 | 试卷管理 | 查看已生成试卷题库、详情、删除 | P0 |
 | F-05 | 在线答题 | 逐题或整卷作答，提交后自动判分 | P0 |
 | F-06 | 成绩与解析 | 展示得分、错题列表及每题解析 | P0 |
 | F-07 | 出题参数配置 | 可配置题目数量、难度倾向、考察范围（章节/全文） | P1 |
@@ -74,7 +74,7 @@
 | 数据库 | SQLite | 嵌入式本地库，零运维 |
 | ORM | MyBatis-Plus | 实体映射与 CRUD |
 | PDF 解析 | Apache PDFBox 或 pdfbox + tabula（表格可选） | 文本提取 |
-| AI 出题 | OpenAI 兼容 API（OpenAI / DeepSeek / 本地 Ollama） | 通过 HTTP 调用 |
+| AI 出题 | OpenAI 兼容 API（智谱 AI / OpenAI / DeepSeek 等） | 通过 HTTP 调用 |
 | 部署 | Docker + Docker Compose | 前后端 + 数据卷持久化 |
 
 ### 3.2 系统架构图
@@ -161,7 +161,7 @@ sequenceDiagram
 | `/` | 首页 | 平台介绍、快捷入口 |
 | `/documents` | 文档列表 | 已上传 PDF、解析状态、删除 |
 | `/documents/upload` | 上传页 | 拖拽上传、参数设置 |
-| `/quizzes` | 试卷列表 | 已生成试卷、进入答题 |
+| `/quizzes` | 试卷题库 | 已生成试卷、进入答题 |
 | `/quizzes/:id` | 答题页 | 展示题目、提交答案 |
 | `/quizzes/:id/result` | 成绩页 | 得分、错题、解析 |
 
@@ -253,7 +253,7 @@ QuizAttempt (1) ──< (N) AnswerRecord ┘
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/quizzes/generate` | 根据 documentId 生成试卷 |
-| GET | `/api/quizzes` | 试卷列表 |
+| GET | `/api/quizzes` | 试卷题库 |
 | GET | `/api/quizzes/{id}` | 试卷详情（含题目，答题模式可隐藏答案） |
 | DELETE | `/api/quizzes/{id}` | 删除试卷 |
 
@@ -306,15 +306,20 @@ QuizAttempt (1) ──< (N) AnswerRecord ┘
 }
 ```
 
-### 7.3 可配置项
+### 7.3 可配置项（多提供商并存）
+
+智谱与 DeepSeek 可同时配置，通过 `LLM_PROVIDER` 或 `LLM_MODEL` 决定当前生效平台：
 
 | 环境变量 | 说明 | 默认值 |
 |----------|------|--------|
-| `LLM_API_BASE` | API 地址（[DeepSeek 文档](https://api-docs.deepseek.com/zh-cn/)） | `https://api.deepseek.com` |
-| `LLM_API_KEY` | API 密钥 | 必填 |
-| `LLM_MODEL` | 模型名称 | `deepseek-v4-flash` |
+| `LLM_PROVIDER` | `auto` / `zhipu` / `deepseek` | `auto` |
+| `LLM_MODEL` | 当前模型（`auto` 时 `glm-*`→智谱，`deepseek-*`→DeepSeek） | 各平台默认模型 |
+| `ZHIPU_API_BASE` / `ZHIPU_API_KEY` / `ZHIPU_DEFAULT_MODEL` | [智谱 AI](https://docs.bigmodel.cn/cn/guide/start/quick-start) | 见 `.env.example` |
+| `DEEPSEEK_API_BASE` / `DEEPSEEK_API_KEY` / `DEEPSEEK_DEFAULT_MODEL` | [DeepSeek](https://api-docs.deepseek.com/zh-cn/) | 见 `.env.example` |
 | `QUIZ_DEFAULT_COUNT` | 默认出题数量 | `10` |
 | `QUIZ_MAX_COUNT` | 最大出题数量 | `30` |
+
+启动后可调用 `GET /api/llm/config` 查看当前生效的 provider 与 model。
 
 ---
 
@@ -331,9 +336,10 @@ QuizAttempt (1) ──< (N) AnswerRecord ┘
 ### 8.2 环境变量（`.env` 示例）
 
 ```env
-LLM_API_BASE=https://api.deepseek.com
-LLM_API_KEY=sk-xxx
-LLM_MODEL=deepseek-v4-flash
+LLM_PROVIDER=auto
+LLM_MODEL=glm-4.7-flash
+ZHIPU_API_KEY=your-zhipu-api-key
+DEEPSEEK_API_KEY=your-deepseek-api-key
 QUIZ_DEFAULT_COUNT=10
 ```
 
@@ -350,7 +356,7 @@ docker compose up -d --build
 ```bash
 # 1. 配置 LLM API Key
 cp .env.example .env
-# 编辑 .env，填入 DeepSeek API Key（https://platform.deepseek.com/api_keys）
+# 编辑 .env，填入智谱 API Key（https://bigmodel.cn/usercenter/proj-mgmt/apikeys）
 
 # 2. 启动后端
 cd backend

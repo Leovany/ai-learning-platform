@@ -33,10 +33,17 @@ app:
   data-dir: ${APP_DATA_DIR:./data}
   upload-dir: ${APP_DATA_DIR:./data}/uploads
   llm:
-    # DeepSeek: https://api-docs.deepseek.com/zh-cn/
-    api-base: ${LLM_API_BASE:https://api.deepseek.com}
-    api-key: ${LLM_API_KEY:}
-    model: ${LLM_MODEL:deepseek-v4-flash}
+    # 当前生效：zhipu | deepseek | auto（根据 LLM_MODEL 前缀 glm/deepseek 自动选择）
+    provider: ${LLM_PROVIDER:auto}
+    model: ${LLM_MODEL:}
+    zhipu:
+      api-base: ${ZHIPU_API_BASE:https://open.bigmodel.cn/api/paas/v4}
+      api-key: ${ZHIPU_API_KEY:}
+      default-model: ${ZHIPU_DEFAULT_MODEL:glm-4.7-flash}
+    deepseek:
+      api-base: ${DEEPSEEK_API_BASE:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      default-model: ${DEEPSEEK_DEFAULT_MODEL:deepseek-chat}
   quiz:
     default-count: ${QUIZ_DEFAULT_COUNT:10}
     max-count: ${QUIZ_MAX_COUNT:30}
