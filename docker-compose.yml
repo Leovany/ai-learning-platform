@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    container_name: ai-learning-backend
+    environment:
+      APP_DATA_DIR: /app/data
+      LLM_API_BASE: ${LLM_API_BASE:-https://api.deepseek.com}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
+      QUIZ_DEFAULT_COUNT: ${QUIZ_DEFAULT_COUNT:-10}
+      QUIZ_MAX_COUNT: ${QUIZ_MAX_COUNT:-30}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./frontend
+    container_name: ai-learning-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

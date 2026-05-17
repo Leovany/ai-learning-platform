@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+backend/target/
+frontend/dist/
+
+# Runtime data (DB, uploads)
+data/
+!data/.gitkeep
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# IDE & editor
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Java
+*.class
+*.jar
+!backend/target/**/*.jar
+
+# Test & cache
+.pytest_cache/
+.coverage
+
+# Cursor / local
+.cursor/
+
+# Maven wrapper (optional, keep if added later)
+# .mvn/wrapper/maven-wrapper.jar
