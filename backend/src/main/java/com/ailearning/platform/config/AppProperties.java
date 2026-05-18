@@ -19,12 +19,13 @@ public class AppProperties {
 
     @Data
     public static class Llm {
-        /** 提供商优先级列表：按顺序尝试，如 ["zhipu", "deepseek"] */
+        /** 提供商优先级列表：按顺序尝试，如 ["zhipu", "deepseek", "qwen"] */
         private List<String> providers = new ArrayList<>();
         /** 指定模型名；不填则使用对应提供商的 default-model */
         private String model = "";
         private ProviderConfig zhipu = new ProviderConfig();
         private ProviderConfig deepseek = new ProviderConfig();
+        private ProviderConfig qwen = new ProviderConfig();
     }
 
     @Data

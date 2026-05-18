@@ -33,10 +33,9 @@ app:
   data-dir: ${APP_DATA_DIR:./data}
   upload-dir: ${APP_DATA_DIR:./data}/uploads
   llm:
-    # 提供商优先级列表：按顺序尝试，如 ["zhipu", "deepseek"]
-    # 配置后将按此顺序依次尝试各提供商，当前提供商失败时自动切换到下一个
-    providers: ${LLM_PROVIDERS:}
-    # 指定模型名；不填则使用对应提供商的 default-model
+    # 提供商优先级列表：按顺序尝试，如 ["zhipu", "deepseek", "qwen"]
+    providers: ${LLM_PROVIDERS:zhipu,deepseek,qwen}
+    # 指定模型名（可选，不填则使用各提供商的默认模型）
     model: ${LLM_MODEL:}
     zhipu:
       api-base: ${ZHIPU_API_BASE:https://open.bigmodel.cn/api/paas/v4}
@@ -46,6 +45,10 @@ app:
       api-base: ${DEEPSEEK_API_BASE:https://api.deepseek.com}
       api-key: ${DEEPSEEK_API_KEY:}
       default-model: ${DEEPSEEK_DEFAULT_MODEL:deepseek-chat}
+    qwen:
+      api-base: ${QWEN_API_BASE:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${QWEN_API_KEY:}
+      default-model: ${QWEN_DEFAULT_MODEL:qwen-plus}
   quiz:
     default-count: ${QUIZ_DEFAULT_COUNT:10}
     max-count: ${QUIZ_MAX_COUNT:30}

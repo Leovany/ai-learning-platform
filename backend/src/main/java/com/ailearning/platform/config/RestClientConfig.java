@@ -14,7 +14,7 @@ public class RestClientConfig {
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
         return builder
                 .setConnectTimeout(Duration.ofSeconds(30))
-                .setReadTimeout(Duration.ofSeconds(120))
+                .setReadTimeout(Duration.ofSeconds(300))
                 .build();
     }
 }

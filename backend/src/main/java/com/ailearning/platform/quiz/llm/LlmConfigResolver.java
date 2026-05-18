@@ -48,7 +48,6 @@ public class LlmConfigResolver {
     private List<String> getProviderPriorityList() {
         List<String> configured = appProperties.getLlm().getProviders();
         
-        // 如果配置了 providers 列表，使用配置的顺序
         if (configured != null && !configured.isEmpty()) {
             return configured.stream()
                     .map(this::normalizeProviderId)
@@ -56,8 +55,7 @@ public class LlmConfigResolver {
                     .collect(Collectors.toList());
         }
         
-        // 否则按默认顺序返回所有配置了 API Key 的提供商
-        List<String> defaultOrder = List.of("zhipu", "deepseek");
+        List<String> defaultOrder = List.of("zhipu", "deepseek", "qwen");
         return defaultOrder.stream()
                 .filter(this::hasValidApiKey)
                 .collect(Collectors.toList());
@@ -83,9 +81,12 @@ public class LlmConfigResolver {
     }
 
     private AppProperties.ProviderConfig getProviderConfig(String providerId) {
-        return "zhipu".equals(providerId)
-                ? appProperties.getLlm().getZhipu()
-                : appProperties.getLlm().getDeepseek();
+        return switch (providerId) {
+            case "zhipu" -> appProperties.getLlm().getZhipu();
+            case "deepseek" -> appProperties.getLlm().getDeepseek();
+            case "qwen" -> appProperties.getLlm().getQwen();
+            default -> throw BusinessException.badRequest("不支持的 LLM 提供商: " + providerId);
+        };
     }
 
     private String resolveModel(String providerId, AppProperties.ProviderConfig config) {
@@ -100,27 +101,35 @@ public class LlmConfigResolver {
     }
 
     private String getDefaultModel(String providerId) {
-        return "zhipu".equals(providerId) ? "glm-4.7-flash" : "deepseek-chat";
+        return switch (providerId) {
+            case "zhipu" -> "glm-4.7-flash";
+            case "deepseek" -> "deepseek-chat";
+            case "qwen" -> "qwen-plus";
+            default -> "glm-4.7-flash";
+        };
     }
 
     private String normalizeApiBase(String providerId, String base) {
         if (base == null || base.isBlank()) {
-            return "zhipu".equals(providerId)
-                    ? "https://open.bigmodel.cn/api/paas/v4"
-                    : "https://api.deepseek.com";
+            return switch (providerId) {
+                case "zhipu" -> "https://open.bigmodel.cn/api/paas/v4";
+                case "deepseek" -> "https://api.deepseek.com";
+                case "qwen" -> "https://dashscope.aliyuncs.com/compatible-mode/v1";
+                default -> throw BusinessException.badRequest("不支持的 LLM 提供商: " + providerId);
+            };
         }
         return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
     }
 
     private String normalizeProviderId(String provider) {
         String id = provider.toLowerCase(Locale.ROOT).trim();
-        if ("zhipu".equals(id) || "zhipuai".equals(id) || "bigmodel".equals(id)) {
-            return "zhipu";
-        }
-        if ("deepseek".equals(id)) {
-            return "deepseek";
-        }
-        throw BusinessException.badRequest("不支持的 LLM_PROVIDER: " + provider + "，可选 zhipu | deepseek");
+        return switch (id) {
+            case "zhipu", "zhipuai", "bigmodel" -> "zhipu";
+            case "deepseek" -> "deepseek";
+            case "qwen", "aliyun", "bailian", "tongyi", "dashscope" -> "qwen";
+            default -> throw BusinessException.badRequest(
+                    "不支持的 LLM_PROVIDER: " + provider + "，可选 zhipu | deepseek | qwen");
+        };
     }
 
     public record ResolvedLlm(String providerId, String apiBase, String apiKey, String model) {}
