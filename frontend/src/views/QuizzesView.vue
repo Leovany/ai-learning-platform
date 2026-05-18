@@ -1,175 +1,90 @@
 <template>
   <el-card shadow="never" v-loading="loading">
-    <template #header>
-      <div class="page-header">
-        <span>试卷题库</span>
-        <div class="header-actions">
-          <el-radio-group v-model="viewMode" size="small" @change="onViewModeChange">
-            <el-radio-button value="document">按文件名</el-radio-button>
-            <el-radio-button value="page">按 PDF 页码</el-radio-button>
-          </el-radio-group>
-          <el-button link type="primary" @click="loadQuizzes">刷新</el-button>
-        </div>
-      </div>
-    </template>
+    <div class="filter-bar">
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索文件名、标题..."
+        clearable
+        class="search-input"
+      >
+        <template #prefix>
+          <el-icon><Search /></el-icon>
+        </template>
+      </el-input>
 
-    <el-empty v-if="!loading && quizzes.length === 0" description="暂无试卷，请先从文档生成考题" />
+      <el-select v-model="statusFilter" placeholder="状态筛选" clearable class="status-select">
+        <el-option label="全部" value="ALL" />
+        <el-option label="进行中" value="ACTIVE" />
+        <el-option label="已完成" value="READY" />
+        <el-option label="失败" value="FAILED" />
+      </el-select>
 
-    <!-- 按文件名分组 -->
-    <template v-else-if="viewMode === 'document'">
-      <el-collapse v-model="expandedDocs" class="doc-collapse">
-        <el-collapse-item
-          v-for="group in documentGroups"
-          :key="group.documentId"
-          :name="group.documentId"
-        >
-          <template #title>
-            <span class="group-title">
-              <el-icon><Document /></el-icon>
-              {{ group.documentName }}
-              <el-tag size="small" type="info" class="count-tag">{{ group.quizzes.length }} 份</el-tag>
-              <span v-if="group.pageCount" class="page-count-hint">共 {{ group.pageCount }} 页</span>
-            </span>
-          </template>
-          <QuizTaskCard
-            v-for="quiz in paginatedQuizzes(group.quizzes, group.documentId)"
-            :key="quiz.id"
-            :quiz="quiz"
-            :action-loading="actionLoadingId === quiz.id"
-            @take="goTake(quiz.id)"
-            @export="onExport(quiz.id, quiz.title)"
-            @delete="onDelete(quiz)"
-            @cancel="onCancel(quiz)"
-            @regenerate="onRegenerate(quiz)"
-          />
-          <el-pagination
-            v-if="group.quizzes.length > pageSize"
-            class="group-pagination"
-            small
-            layout="prev, pager, next"
-            :total="group.quizzes.length"
-            :page-size="pageSize"
-            :current-page="docPageMap[group.documentId] || 1"
-            @current-change="(p: number) => setDocPage(group.documentId, p)"
-          />
-        </el-collapse-item>
-      </el-collapse>
-    </template>
+      <el-select v-model="sortOrder" class="sort-select">
+        <el-option label="最新在前" value="newest" />
+        <el-option label="最早在前" value="oldest" />
+        <el-option label="题目最多" value="mostQuestions" />
+        <el-option label="题目最少" value="leastQuestions" />
+      </el-select>
 
-    <!-- 按 PDF 页码分组 -->
-    <template v-else>
-      <div v-if="pageViewLoading" class="page-loading">
-        <el-icon class="is-loading"><Loading /></el-icon>
-        正在分析题目页码…
-      </div>
-      <el-collapse v-else v-model="expandedDocs" class="doc-collapse">
-        <el-collapse-item
-          v-for="docGroup in pageViewByDocument"
-          :key="docGroup.documentId"
-          :name="docGroup.documentId"
-        >
-          <template #title>
-            <span class="group-title">
-              <el-icon><Document /></el-icon>
-              {{ docGroup.documentName }}
-              <el-tag size="small" type="info" class="count-tag">
-                {{ docGroup.pageSections.length }} 个页码分组
-              </el-tag>
-            </span>
-          </template>
+      <el-button link type="primary" @click="loadQuizzes">刷新</el-button>
+    </div>
 
-          <div v-if="docGroup.activeQuizzes.length" class="subsection">
-            <div class="subsection-title">进行中的任务</div>
-            <QuizTaskCard
-              v-for="quiz in docGroup.activeQuizzes"
-              :key="quiz.id"
-              :quiz="quiz"
-              :action-loading="actionLoadingId === quiz.id"
-              @take="goTake(quiz.id)"
-              @export="onExport(quiz.id, quiz.title)"
-              @delete="onDelete(quiz)"
-              @cancel="onCancel(quiz)"
-              @regenerate="onRegenerate(quiz)"
-            />
-          </div>
+    <el-empty v-if="!loading && filteredQuizzes.length === 0" description="暂无试卷，请先从文档生成考题" />
 
-          <div
-            v-for="section in docGroup.pageSections"
-            :key="`${docGroup.documentId}-p-${section.page}`"
-            class="subsection"
-          >
-            <div class="subsection-title">
-              {{ section.page > 0 ? `第 ${section.page} 页` : '未标注页码' }}
-              <el-tag size="small" type="success">{{ section.quizzes.length }} 份试卷</el-tag>
-            </div>
-            <QuizTaskCard
-              v-for="quiz in section.quizzes"
-              :key="`${quiz.id}-${section.page}`"
-              :quiz="quiz"
-              :page-hint="`本题集含第 ${formatPageList(quizPageMap.get(quiz.id))} 页`"
-              :action-loading="actionLoadingId === quiz.id"
-              @take="goTake(quiz.id)"
-              @export="onExport(quiz.id, quiz.title)"
-              @delete="onDelete(quiz)"
-              @cancel="onCancel(quiz)"
-              @regenerate="onRegenerate(quiz)"
-            />
-          </div>
+    <div v-else class="quiz-list">
+      <QuizTaskCard
+        v-for="quiz in paginatedFilteredQuizzes"
+        :key="quiz.id"
+        :quiz="quiz"
+        :action-loading="actionLoadingId === quiz.id"
+        @take="goTake(quiz.id)"
+        @export="onExport(quiz.id, quiz.title)"
+        @delete="onDelete(quiz)"
+        @cancel="onCancel(quiz)"
+        @regenerate="onRegenerate(quiz)"
+      />
+    </div>
 
-          <el-empty
-            v-if="!docGroup.activeQuizzes.length && !docGroup.pageSections.length"
-            description="该文档暂无已完成的试卷"
-            :image-size="60"
-          />
-        </el-collapse-item>
-      </el-collapse>
-    </template>
+    <div v-if="filteredQuizzes.length > pageSize" class="pagination-wrapper">
+      <el-pagination
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="filteredQuizzes.length"
+        layout="prev, pager, next"
+        background
+      />
+    </div>
   </el-card>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Document, Loading } from '@element-plus/icons-vue'
+import { Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import QuizTaskCard from '@/components/QuizTaskCard.vue'
-import { listDocuments, type DocumentVO } from '@/api/document'
 import {
   cancelQuiz,
   deleteQuiz,
   exportQuiz,
   generateQuiz,
-  getQuiz,
   getQuizStatus,
   listQuizzes,
   type QuizVO,
 } from '@/api/quiz'
 
-type ViewMode = 'document' | 'page'
-
-interface DocumentGroup {
-  documentId: number
-  documentName: string
-  pageCount: number | null
-  quizzes: QuizVO[]
-}
-
-interface PageSection {
-  page: number
-  quizzes: QuizVO[]
-}
+type SortOrder = 'newest' | 'oldest' | 'mostQuestions' | 'leastQuestions'
+type StatusFilter = 'ALL' | 'ACTIVE' | 'READY' | 'FAILED'
 
 const router = useRouter()
 const loading = ref(false)
-const pageViewLoading = ref(false)
-const viewMode = ref<ViewMode>('document')
 const quizzes = ref<QuizVO[]>([])
-const documents = ref<DocumentVO[]>([])
-const quizPageMap = ref<Map<number, Set<number>>>(new Map())
-const expandedDocs = ref<number[]>([])
 const actionLoadingId = ref<number | null>(null)
-const pageSize = 5
-const docPageMap = reactive<Record<number, number>>({})
+const pageSize = 10
+const currentPage = ref(1)
+const searchQuery = ref('')
+const statusFilter = ref<StatusFilter>('ALL')
+const sortOrder = ref<SortOrder>('newest')
 
 let refreshTimer: number | null = null
 
@@ -177,144 +92,57 @@ const hasPendingTasks = computed(() =>
   quizzes.value.some((q) => q.status === 'PENDING' || q.status === 'GENERATING'),
 )
 
-const documentGroups = computed<DocumentGroup[]>(() => {
-  const docById = new Map(documents.value.map((d) => [d.id, d]))
-  const map = new Map<number, QuizVO[]>()
-
-  for (const q of quizzes.value) {
-    if (!map.has(q.documentId)) {
-      map.set(q.documentId, [])
-    }
-    map.get(q.documentId)!.push(q)
-  }
-
-  return Array.from(map.entries())
-    .map(([documentId, items]) => {
-      const doc = docById.get(documentId)
-      return {
-        documentId,
-        documentName: doc?.fileName ?? items[0]?.documentName ?? `文档 #${documentId}`,
-        pageCount: doc?.pageCount ?? null,
-        quizzes: [...items].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        ),
-      }
-    })
-    .sort((a, b) => a.documentName.localeCompare(b.documentName, 'zh-CN'))
-})
-
-const pageViewByDocument = computed(() => {
-  return documentGroups.value.map((dg) => {
-    const activeQuizzes = dg.quizzes.filter(
-      (q) => q.status === 'PENDING' || q.status === 'GENERATING' || q.status === 'FAILED',
+const filteredQuizzes = computed(() => {
+  let result = [...quizzes.value]
+  
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    result = result.filter(
+      (q) =>
+        q.title.toLowerCase().includes(query) ||
+        q.documentName.toLowerCase().includes(query),
     )
-
-    const pageToQuizzes = new Map<number, QuizVO[]>()
-    for (const q of dg.quizzes.filter((x) => x.status === 'READY')) {
-      const pages = quizPageMap.value.get(q.id)
-      if (!pages?.size) {
-        const fallback = 0
-        if (!pageToQuizzes.has(fallback)) {
-          pageToQuizzes.set(fallback, [])
-        }
-        pageToQuizzes.get(fallback)!.push(q)
-        continue
-      }
-      for (const page of pages) {
-        if (!pageToQuizzes.has(page)) {
-          pageToQuizzes.set(page, [])
-        }
-        if (!pageToQuizzes.get(page)!.some((x) => x.id === q.id)) {
-          pageToQuizzes.get(page)!.push(q)
-        }
-      }
+  }
+  
+  if (statusFilter.value !== 'ALL') {
+    if (statusFilter.value === 'ACTIVE') {
+      result = result.filter((q) => q.status === 'PENDING' || q.status === 'GENERATING')
+    } else if (statusFilter.value === 'READY') {
+      result = result.filter((q) => q.status === 'READY')
+    } else if (statusFilter.value === 'FAILED') {
+      result = result.filter((q) => q.status === 'FAILED' || q.status === 'CANCELLED')
     }
-
-    const pageSections: PageSection[] = Array.from(pageToQuizzes.entries())
-      .filter(([page]) => page > 0)
-      .sort(([a], [b]) => a - b)
-      .map(([page, items]) => ({ page, quizzes: items }))
-
-    const unassigned = pageToQuizzes.get(0)
-    if (unassigned?.length) {
-      pageSections.push({ page: 0, quizzes: unassigned })
-    }
-
-    return {
-      ...dg,
-      activeQuizzes,
-      pageSections,
+  }
+  
+  result.sort((a, b) => {
+    switch (sortOrder.value) {
+      case 'newest':
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      case 'oldest':
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      case 'mostQuestions':
+        return b.questionCount - a.questionCount
+      case 'leastQuestions':
+        return a.questionCount - b.questionCount
+      default:
+        return 0
     }
   })
+  
+  return result
 })
 
-function paginatedQuizzes(items: QuizVO[], documentId: number) {
-  const page = docPageMap[documentId] || 1
-  const start = (page - 1) * pageSize
-  return items.slice(start, start + pageSize)
-}
-
-function setDocPage(documentId: number, page: number) {
-  docPageMap[documentId] = page
-}
-
-function formatPageList(pages: Set<number> | undefined) {
-  if (!pages?.size) return '-'
-  return [...pages].sort((a, b) => a - b).join('、')
-}
-
-async function enrichQuizPages() {
-  const ready = quizzes.value.filter((q) => q.status === 'READY')
-  if (!ready.length) {
-    quizPageMap.value = new Map()
-    return
-  }
-  pageViewLoading.value = true
-  try {
-    const map = new Map<number, Set<number>>()
-    await Promise.all(
-      ready.map(async (q) => {
-        try {
-          const detail = await getQuiz(q.id, false)
-          const pages = new Set(
-            (detail.questions ?? [])
-              .map((x) => x.sourcePage)
-              .filter((p): p is number => p != null && p > 0),
-          )
-          map.set(q.id, pages)
-        } catch {
-          map.set(q.id, new Set())
-        }
-      }),
-    )
-    quizPageMap.value = map
-  } finally {
-    pageViewLoading.value = false
-  }
-}
-
-function syncExpandedDocs() {
-  expandedDocs.value = documentGroups.value.map((g) => g.documentId)
-}
+const paginatedFilteredQuizzes = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredQuizzes.value.slice(start, start + pageSize)
+})
 
 async function loadQuizzes() {
   loading.value = true
   try {
-    const [quizList, docList] = await Promise.all([listQuizzes(), listDocuments()])
-    quizzes.value = quizList
-    documents.value = docList
-    syncExpandedDocs()
-    if (viewMode.value === 'page') {
-      await enrichQuizPages()
-    }
+    quizzes.value = await listQuizzes()
   } finally {
     loading.value = false
-  }
-}
-
-async function onViewModeChange() {
-  if (viewMode.value === 'page') {
-    await enrichQuizPages()
   }
 }
 
@@ -332,16 +160,6 @@ async function refreshPendingQuizzes() {
       }
     } catch (e) {
       console.error('Failed to refresh quiz status:', e)
-    }
-  }
-
-  if (viewMode.value === 'page') {
-    const becameReady = pendingIds.some((id) => {
-      const q = quizzes.value.find((x) => x.id === id)
-      return q?.status === 'READY'
-    })
-    if (becameReady) {
-      await enrichQuizPages()
     }
   }
 }
@@ -433,8 +251,6 @@ async function onDelete(row: QuizVO) {
   await loadQuizzes()
 }
 
-watch(documentGroups, syncExpandedDocs, { deep: true })
-
 onMounted(async () => {
   await loadQuizzes()
   startAutoRefresh()
@@ -444,58 +260,34 @@ onUnmounted(stopAutoRefresh)
 </script>
 
 <style scoped>
-.page-header {
+.filter-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   gap: 12px;
-}
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.doc-collapse {
-  border: none;
-}
-.group-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 15px;
-}
-.count-tag {
-  margin-left: 4px;
-}
-.page-count-hint {
-  font-size: 12px;
-  font-weight: normal;
-  color: #909399;
-}
-.group-pagination {
-  margin-top: 8px;
-  justify-content: flex-end;
-}
-.subsection {
   margin-bottom: 20px;
+  flex-wrap: wrap;
 }
-.subsection-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #606266;
-  margin-bottom: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+
+.search-input {
+  width: 300px;
 }
-.page-loading {
+
+.status-select {
+  width: 150px;
+}
+
+.sort-select {
+  width: 150px;
+}
+
+.quiz-list {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
+  display: flex;
   justify-content: center;
-  gap: 8px;
-  padding: 40px;
-  color: #909399;
 }
 </style>
