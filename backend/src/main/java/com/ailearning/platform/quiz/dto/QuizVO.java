@@ -22,5 +22,9 @@ public class QuizVO {
     private LocalDateTime createdAt;
     private Integer progress;
     private LocalDateTime estimatedCompletionTime;
+    /** 生成考题使用的大模型提供商 */
+    private String llmProvider;
+    /** 生成考题使用的模型名 */
+    private String llmModel;
     private List<QuestionVO> questions;
 }

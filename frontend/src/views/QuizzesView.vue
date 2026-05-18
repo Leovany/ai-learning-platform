@@ -26,6 +26,9 @@
           <div class="task-meta">
             <span class="meta-item">📄 {{ quiz.documentName }}</span>
             <span class="meta-item">📝 {{ quiz.questionCount }} 题</span>
+            <span v-if="llmLabel(quiz)" class="meta-item llm-meta">
+              🤖 由 {{ llmLabel(quiz) }} 生成
+            </span>
           </div>
         </div>
 
@@ -134,8 +137,13 @@ import {
   quizStatusType,
   type QuizVO,
 } from '@/api/quiz'
+import { formatLlmLabel } from '@/utils/llm'
 
 const router = useRouter()
+
+function llmLabel(quiz: QuizVO) {
+  return formatLlmLabel(quiz.llmProvider, quiz.llmModel)
+}
 const loading = ref(false)
 const quizzes = ref<QuizVO[]>([])
 const regeneratingId = ref<number | null>(null)
@@ -317,6 +325,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.llm-meta {
+  color: #409eff;
 }
 
 .progress-section {

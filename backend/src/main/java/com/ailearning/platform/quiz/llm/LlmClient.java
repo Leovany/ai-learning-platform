@@ -27,9 +27,9 @@ public class LlmClient {
     private static final long INITIAL_DELAY_MS = 2000;
 
     /**
-     * 调用 LLM，支持多提供商故障转移
+     * 调用 LLM，支持多提供商故障转移；返回实际成功使用的提供商与模型。
      */
-    public String chat(String systemPrompt, String userPrompt) {
+    public LlmChatResult chat(String systemPrompt, String userPrompt) {
         List<LlmConfigResolver.ResolvedLlm> llmList = llmConfigResolver.resolveAll();
         Exception lastException = null;
         
@@ -39,8 +39,8 @@ public class LlmClient {
             
             try {
                 String result = chatWithRetry(llm, systemPrompt, userPrompt);
-                log.info("LLM 调用成功: provider={}", llm.providerId());
-                return result;
+                log.info("LLM 调用成功: provider={}, model={}", llm.providerId(), llm.model());
+                return new LlmChatResult(result, llm.providerId(), llm.model());
             } catch (Exception e) {
                 lastException = e;
                 log.warn("LLM 调用失败 [{}/{}]: provider={}, error={}", 

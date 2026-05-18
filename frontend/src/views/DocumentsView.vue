@@ -104,6 +104,10 @@
           </el-select>
         </el-form-item>
       </el-form>
+      <p v-if="plannedLlmLabel" class="gen-tip">
+        将按配置调用大模型（失败时自动切换）：当前优先 <strong>{{ plannedLlmLabel }}</strong>
+      </p>
+      <p v-else class="gen-tip">将调用大模型生成选择题，请确保已在 .env 中配置 API Key</p>
       <template #footer>
         <el-button :disabled="generating" @click="generateVisible = false">取消</el-button>
         <el-button type="primary" :loading="generating" @click="confirmGenerate">开始生成</el-button>
@@ -128,6 +132,8 @@ import {
   type DocumentVO,
 } from '@/api/document'
 import { generateQuiz, getQuizConfig, type QuizDifficulty, type QuizConfigVO } from '@/api/quiz'
+import { getLlmConfig } from '@/api/llm'
+import { formatLlmLabel } from '@/utils/llm'
 
 const router = useRouter()
 const loading = ref(false)
@@ -146,6 +152,7 @@ const questionCount = ref(10)
 const difficulty = ref<QuizDifficulty>('medium')
 const generating = ref(false)
 const quizConfig = ref<QuizConfigVO | null>(null)
+const plannedLlmLabel = ref('')
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('zh-CN')
@@ -214,10 +221,17 @@ async function onReparse() {
   }
 }
 
-function openGenerate(row: DocumentVO) {
+async function openGenerate(row: DocumentVO) {
   generateDoc.value = row
   questionCount.value = quizConfig.value?.defaultCount ?? 10
   generateVisible.value = true
+  plannedLlmLabel.value = ''
+  try {
+    const cfg = await getLlmConfig()
+    plannedLlmLabel.value = formatLlmLabel(cfg.provider, cfg.model)
+  } catch {
+    plannedLlmLabel.value = ''
+  }
 }
 
 async function confirmGenerate() {

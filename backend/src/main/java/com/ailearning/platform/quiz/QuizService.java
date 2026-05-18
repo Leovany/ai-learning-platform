@@ -13,8 +13,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -45,6 +46,8 @@ public class QuizService {
     private final AppProperties appProperties;
 
     private final Map<Long, Boolean> cancelTokens = new ConcurrentHashMap<>();
+    /** 避免轮询恢复时对同一任务重复提交异步 */
+    private final Set<Long> recoveryScheduled = ConcurrentHashMap.newKeySet();
 
     @Transactional
     public QuizVO generate(GenerateQuizRequest request) {
@@ -71,17 +74,29 @@ public class QuizService {
 
         cancelTokens.put(quiz.getId(), false);
 
-        self.asyncGenerateQuiz(quiz.getId(), request.getQuestionCount(), request.getDifficulty());
+        Long quizId = quiz.getId();
+        Integer questionCount = request.getQuestionCount();
+        String difficulty = request.getDifficulty();
+        // 必须在事务提交后再启动异步任务，否则异步线程可能读不到刚插入的记录而一直停在 PENDING
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                self.asyncGenerateQuiz(quizId, questionCount, difficulty);
+            }
+        });
 
         return toSummaryVO(quiz, doc.getFileName());
     }
 
     @Async("taskExecutor")
     public void asyncGenerateQuiz(Long quizId, Integer questionCount, String difficulty) {
+        recoveryScheduled.remove(quizId);
         log.info("Async task started for quizId: {}", quizId);
         try {
             Quiz quiz = quizRepository.findById(quizId).orElse(null);
             if (quiz == null) {
+                log.error("Quiz {} not found in async worker", quizId);
+                updateQuizFailed(quizId, "任务记录不存在，请删除后重新生成");
                 return;
             }
 
@@ -119,7 +134,7 @@ public class QuizService {
 
             updateProgress(quizId, 30, "调用大模型生成题目...");
 
-            List<LlmGeneratedQuestion> generated = callLlmWithRetry(doc, count, difficulty);
+            LlmGenerateOutcome outcome = callLlmWithRetry(doc, count, difficulty);
 
             if (isCancelled(quizId)) {
                 markAsCancelled(quizId);
@@ -128,7 +143,7 @@ public class QuizService {
 
             updateProgress(quizId, 70, "保存题目数据...");
 
-            saveQuestions(quizId, doc, generated);
+            saveQuestions(quizId, doc, outcome.questions());
 
             if (isCancelled(quizId)) {
                 markAsCancelled(quizId);
@@ -139,15 +154,18 @@ public class QuizService {
 
             quiz = quizRepository.findById(quizId).orElse(null);
             if (quiz != null) {
-                quiz.setQuestionCount(generated.size());
+                quiz.setQuestionCount(outcome.questions().size());
                 quiz.setStatus(QuizStatus.READY);
                 quiz.setProgress(100);
                 quiz.setEstimatedCompletionTime(LocalDateTime.now());
+                quiz.setLlmProvider(outcome.providerId());
+                quiz.setLlmModel(outcome.model());
                 quizRepository.save(quiz);
             }
 
             cancelTokens.remove(quizId);
-            log.info("Quiz {} generated successfully with {} questions", quizId, generated.size());
+            log.info("Quiz {} generated successfully with {} questions via {}/{}",
+                    quizId, outcome.questions().size(), outcome.providerId(), outcome.model());
 
         } catch (BusinessException e) {
             updateQuizFailed(quizId, e.getMessage());
@@ -218,6 +236,7 @@ public class QuizService {
 
     @Transactional(readOnly = true)
     public List<QuizVO> listAll() {
+        recoverStuckPendingQuizzes();
         Map<Long, String> docNames = documentRepository.findAll().stream()
                 .collect(Collectors.toMap(LearningDocument::getId, LearningDocument::getFileName));
         return quizRepository.findAllByOrderByCreatedAtDesc().stream()
@@ -238,11 +257,28 @@ public class QuizService {
 
     @Transactional(readOnly = true)
     public QuizVO getStatus(Long id) {
+        recoverStuckPendingQuizzes();
         Quiz quiz = findQuizOrThrow(id);
         String docName = documentRepository.findById(quiz.getDocumentId())
                 .map(LearningDocument::getFileName)
                 .orElse("");
         return toSummaryVO(quiz, docName);
+    }
+
+    /**
+     * 恢复因事务竞态等原因卡在 PENDING 的任务（创建超过 30 秒仍未开始）
+     */
+    private void recoverStuckPendingQuizzes() {
+        LocalDateTime threshold = LocalDateTime.now().minusSeconds(30);
+        List<Quiz> stuck = quizRepository.findByStatusAndCreatedAtBefore(QuizStatus.PENDING, threshold);
+        for (Quiz quiz : stuck) {
+            if (!recoveryScheduled.add(quiz.getId())) {
+                continue;
+            }
+            log.warn("Recovering stuck PENDING quiz id={}", quiz.getId());
+            cancelTokens.putIfAbsent(quiz.getId(), false);
+            self.asyncGenerateQuiz(quiz.getId(), quiz.getQuestionCount(), null);
+        }
     }
 
     @Transactional
@@ -374,14 +410,17 @@ public class QuizService {
         return sb.toString();
     }
 
-    private List<LlmGeneratedQuestion> callLlmWithRetry(LearningDocument doc, int count, String difficulty) {
+    private record LlmGenerateOutcome(List<LlmGeneratedQuestion> questions, String providerId, String model) {}
+
+    private LlmGenerateOutcome callLlmWithRetry(LearningDocument doc, int count, String difficulty) {
         String systemPrompt = buildSystemPrompt();
         String userPrompt = buildUserPrompt(doc, count, difficulty);
         BusinessException lastError = null;
         for (int i = 0; i < MAX_LLM_RETRIES; i++) {
             try {
-                String content = llmClient.chat(systemPrompt, userPrompt);
-                return llmQuizParser.parse(content, count);
+                var chatResult = llmClient.chat(systemPrompt, userPrompt);
+                var questions = llmQuizParser.parse(chatResult.content(), count);
+                return new LlmGenerateOutcome(questions, chatResult.providerId(), chatResult.model());
             } catch (BusinessException e) {
                 lastError = e;
                 log.warn("LLM attempt {} failed: {}", i + 1, e.getMessage());
@@ -520,6 +559,8 @@ public class QuizService {
                 .createdAt(quiz.getCreatedAt())
                 .progress(quiz.getProgress())
                 .estimatedCompletionTime(quiz.getEstimatedCompletionTime())
+                .llmProvider(quiz.getLlmProvider())
+                .llmModel(quiz.getLlmModel())
                 .questions(questionVOs)
                 .build();
     }
@@ -536,6 +577,8 @@ public class QuizService {
                 .createdAt(quiz.getCreatedAt())
                 .progress(quiz.getProgress())
                 .estimatedCompletionTime(quiz.getEstimatedCompletionTime())
+                .llmProvider(quiz.getLlmProvider())
+                .llmModel(quiz.getLlmModel())
                 .build();
     }
 

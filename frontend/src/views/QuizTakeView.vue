@@ -2,7 +2,12 @@
   <el-card shadow="never" v-loading="loading">
     <template #header>
       <div class="card-header">
-        <span>{{ quiz?.title || '答题' }}</span>
+        <div class="header-left">
+          <span>{{ quiz?.title || '答题' }}</span>
+          <el-tag v-if="llmLabel" type="info" size="small" class="llm-tag">
+            由 {{ llmLabel }} 生成
+          </el-tag>
+        </div>
         <el-tag v-if="quiz">第 {{ currentIndex + 1 }} / {{ questions.length }} 题</el-tag>
       </div>
     </template>
@@ -48,6 +53,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getQuiz, submitQuiz, type QuestionVO, type QuizVO } from '@/api/quiz'
+import { formatLlmLabel } from '@/utils/llm'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,6 +67,10 @@ const currentIndex = ref(0)
 const answers = reactive<Record<number, string>>({})
 
 const currentQuestion = computed(() => questions.value[currentIndex.value])
+
+const llmLabel = computed(() =>
+  formatLlmLabel(quiz.value?.llmProvider, quiz.value?.llmModel),
+)
 
 function optionList(q: QuestionVO) {
   return [
@@ -115,6 +125,19 @@ async function onSubmit() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.llm-tag {
+  font-weight: normal;
 }
 .stem {
   font-size: 16px;

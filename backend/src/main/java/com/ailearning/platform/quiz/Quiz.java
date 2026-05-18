@@ -39,6 +39,12 @@ public class Quiz {
 
     private String taskToken;
 
+    /** 实际生成考题使用的大模型提供商，如 zhipu / deepseek / qwen */
+    private String llmProvider;
+
+    /** 实际生成考题使用的模型名，如 glm-4.7-flash */
+    private String llmModel;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

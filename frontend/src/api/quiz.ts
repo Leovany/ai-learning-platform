@@ -33,6 +33,8 @@ export interface QuizVO {
   createdAt: string
   progress?: number
   estimatedCompletionTime?: string
+  llmProvider?: string | null
+  llmModel?: string | null
   questions?: QuestionVO[]
 }
 
