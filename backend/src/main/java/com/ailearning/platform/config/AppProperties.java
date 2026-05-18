@@ -4,6 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @Component
 @ConfigurationProperties(prefix = "app")
@@ -16,8 +19,8 @@ public class AppProperties {
 
     @Data
     public static class Llm {
-        /** 当前提供商：zhipu | deepseek | auto（根据 LLM_MODEL 自动推断） */
-        private String provider = "auto";
+        /** 提供商优先级列表：按顺序尝试，如 ["zhipu", "deepseek"] */
+        private List<String> providers = new ArrayList<>();
         /** 指定模型名；不填则使用对应提供商的 default-model */
         private String model = "";
         private ProviderConfig zhipu = new ProviderConfig();

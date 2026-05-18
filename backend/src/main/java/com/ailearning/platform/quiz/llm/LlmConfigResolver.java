@@ -5,7 +5,10 @@ import com.ailearning.platform.config.AppProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -13,62 +16,70 @@ public class LlmConfigResolver {
 
     private final AppProperties appProperties;
 
+    /**
+     * 获取所有可用的 LLM 配置列表（按优先级排序）
+     */
+    public List<ResolvedLlm> resolveAll() {
+        List<String> providerIds = getProviderPriorityList();
+        List<ResolvedLlm> resolved = new ArrayList<>();
+        
+        for (String providerId : providerIds) {
+            ResolvedLlm llm = resolveSingle(providerId);
+            resolved.add(llm);
+        }
+        
+        if (resolved.isEmpty()) {
+            throw BusinessException.serviceUnavailable("未配置任何有效的大模型 API Key");
+        }
+        
+        return resolved;
+    }
+
+    /**
+     * 获取单个 LLM 配置（返回第一个可用的）
+     */
     public ResolvedLlm resolve() {
-        String providerId = determineProvider();
+        return resolveAll().get(0);
+    }
+
+    /**
+     * 获取提供商优先级列表
+     */
+    private List<String> getProviderPriorityList() {
+        List<String> configured = appProperties.getLlm().getProviders();
+        
+        // 如果配置了 providers 列表，使用配置的顺序
+        if (configured != null && !configured.isEmpty()) {
+            return configured.stream()
+                    .map(this::normalizeProviderId)
+                    .filter(this::hasValidApiKey)
+                    .collect(Collectors.toList());
+        }
+        
+        // 否则按默认顺序返回所有配置了 API Key 的提供商
+        List<String> defaultOrder = List.of("zhipu", "deepseek");
+        return defaultOrder.stream()
+                .filter(this::hasValidApiKey)
+                .collect(Collectors.toList());
+    }
+
+    private boolean hasValidApiKey(String providerId) {
+        AppProperties.ProviderConfig config = getProviderConfig(providerId);
+        return config != null && config.getApiKey() != null && !config.getApiKey().isBlank();
+    }
+
+    private ResolvedLlm resolveSingle(String providerId) {
         AppProperties.ProviderConfig config = getProviderConfig(providerId);
         String apiKey = config.getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
             throw BusinessException.serviceUnavailable(
-                    "未配置 " + providerId.toUpperCase(Locale.ROOT) + "_API_KEY，请在 .env 中设置");
+                    "未配置 " + providerId.toUpperCase(Locale.ROOT) + "_API_KEY");
         }
 
         String model = resolveModel(providerId, config);
         String apiBase = normalizeApiBase(providerId, config.getApiBase());
 
         return new ResolvedLlm(providerId, apiBase, apiKey, model);
-    }
-
-    private String determineProvider() {
-        String explicit = appProperties.getLlm().getProvider();
-        if (explicit != null && !explicit.isBlank() && !"auto".equalsIgnoreCase(explicit)) {
-            return normalizeProviderId(explicit);
-        }
-        String modelHint = appProperties.getLlm().getModel();
-        if (modelHint != null && !modelHint.isBlank()) {
-            String inferred = inferProviderFromModel(modelHint);
-            if (inferred != null) {
-                return inferred;
-            }
-        }
-        if (hasApiKey(appProperties.getLlm().getZhipu())) {
-            return "zhipu";
-        }
-        if (hasApiKey(appProperties.getLlm().getDeepseek())) {
-            return "deepseek";
-        }
-        throw BusinessException.serviceUnavailable("未配置任何大模型 API Key（ZHIPU_API_KEY 或 DEEPSEEK_API_KEY）");
-    }
-
-    private String inferProviderFromModel(String model) {
-        String lower = model.toLowerCase(Locale.ROOT);
-        if (lower.startsWith("glm") || lower.startsWith("cogview") || lower.startsWith("charglm")) {
-            return "zhipu";
-        }
-        if (lower.startsWith("deepseek")) {
-            return "deepseek";
-        }
-        return null;
-    }
-
-    private String normalizeProviderId(String provider) {
-        String id = provider.toLowerCase(Locale.ROOT).trim();
-        if ("zhipu".equals(id) || "zhipuai".equals(id) || "bigmodel".equals(id)) {
-            return "zhipu";
-        }
-        if ("deepseek".equals(id)) {
-            return "deepseek";
-        }
-        throw BusinessException.badRequest("不支持的 LLM_PROVIDER: " + provider + "，可选 zhipu | deepseek | auto");
     }
 
     private AppProperties.ProviderConfig getProviderConfig(String providerId) {
@@ -80,16 +91,15 @@ public class LlmConfigResolver {
     private String resolveModel(String providerId, AppProperties.ProviderConfig config) {
         String globalModel = appProperties.getLlm().getModel();
         if (globalModel != null && !globalModel.isBlank()) {
-            String inferred = inferProviderFromModel(globalModel);
-            if (inferred == null || inferred.equals(providerId)) {
-                return globalModel;
-            }
-            throw BusinessException.badRequest(
-                    "LLM_MODEL=" + globalModel + " 与 LLM_PROVIDER=" + providerId + " 不匹配，请检查配置");
+            return globalModel;
         }
         if (config.getDefaultModel() != null && !config.getDefaultModel().isBlank()) {
             return config.getDefaultModel();
         }
+        return getDefaultModel(providerId);
+    }
+
+    private String getDefaultModel(String providerId) {
         return "zhipu".equals(providerId) ? "glm-4.7-flash" : "deepseek-chat";
     }
 
@@ -99,15 +109,18 @@ public class LlmConfigResolver {
                     ? "https://open.bigmodel.cn/api/paas/v4"
                     : "https://api.deepseek.com";
         }
-        String normalized = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
-        if ("deepseek".equals(providerId) && normalized.endsWith("/v1")) {
-            normalized = normalized.substring(0, normalized.length() - 3);
-        }
-        return normalized;
+        return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
     }
 
-    private boolean hasApiKey(AppProperties.ProviderConfig config) {
-        return config.getApiKey() != null && !config.getApiKey().isBlank();
+    private String normalizeProviderId(String provider) {
+        String id = provider.toLowerCase(Locale.ROOT).trim();
+        if ("zhipu".equals(id) || "zhipuai".equals(id) || "bigmodel".equals(id)) {
+            return "zhipu";
+        }
+        if ("deepseek".equals(id)) {
+            return "deepseek";
+        }
+        throw BusinessException.badRequest("不支持的 LLM_PROVIDER: " + provider + "，可选 zhipu | deepseek");
     }
 
     public record ResolvedLlm(String providerId, String apiBase, String apiKey, String model) {}

@@ -33,8 +33,10 @@ app:
   data-dir: ${APP_DATA_DIR:./data}
   upload-dir: ${APP_DATA_DIR:./data}/uploads
   llm:
-    # 当前生效：zhipu | deepseek | auto（根据 LLM_MODEL 前缀 glm/deepseek 自动选择）
-    provider: ${LLM_PROVIDER:auto}
+    # 提供商优先级列表：按顺序尝试，如 ["zhipu", "deepseek"]
+    # 配置后将按此顺序依次尝试各提供商，当前提供商失败时自动切换到下一个
+    providers: ${LLM_PROVIDERS:}
+    # 指定模型名；不填则使用对应提供商的 default-model
     model: ${LLM_MODEL:}
     zhipu:
       api-base: ${ZHIPU_API_BASE:https://open.bigmodel.cn/api/paas/v4}
