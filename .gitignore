@@ -42,5 +42,8 @@ logs/
 # Cursor / local
 .cursor/
 
+# DB
+mysql-data/
+
 # Maven wrapper (optional, keep if added later)
 # .mvn/wrapper/maven-wrapper.jar

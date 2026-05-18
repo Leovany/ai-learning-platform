@@ -1,4 +1,25 @@
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: ai-learning-mysql
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
+      MYSQL_DATABASE: ${DB_NAME:-learning_db}
+      MYSQL_USER: ${DB_USERNAME:-admin}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-password}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+    ports:
+      - "3309:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   backend:
     build: ./backend
     container_name: ai-learning-backend
@@ -6,24 +27,34 @@ services:
       - .env
     environment:
       APP_DATA_DIR: /app/data
+      DB_HOST: mysql
+      TZ: Asia/Shanghai
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
-      LLM_MODEL: ${LLM_MODEL:-glm-4.7-flash}
+      LLM_MODEL: ${LLM_MODEL:-}
       ZHIPU_API_BASE: ${ZHIPU_API_BASE:-https://open.bigmodel.cn/api/paas/v4}
       ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
       ZHIPU_DEFAULT_MODEL: ${ZHIPU_DEFAULT_MODEL:-glm-4.7-flash}
       DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_DEFAULT_MODEL: ${DEEPSEEK_DEFAULT_MODEL:-deepseek-chat}
+      QWEN_API_BASE: ${QWEN_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      QWEN_DEFAULT_MODEL: ${QWEN_DEFAULT_MODEL:-qwen-plus}
       QUIZ_DEFAULT_COUNT: ${QUIZ_DEFAULT_COUNT:-10}
       QUIZ_MAX_COUNT: ${QUIZ_MAX_COUNT:-50}
     volumes:
       - ./data:/app/data
     ports:
       - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
     container_name: ai-learning-frontend
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "80:80"
     depends_on:

@@ -11,10 +11,12 @@ spring:
       max-file-size: 20MB
       max-request-size: 20MB
   datasource:
-    url: jdbc:sqlite:${APP_DATA_DIR:./data}/db/learning.db
-    driver-class-name: org.sqlite.JDBC
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:learning_db}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USERNAME:admin}
+    password: ${DB_PASSWORD:password}
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
       ddl-auto: update
     show-sql: false

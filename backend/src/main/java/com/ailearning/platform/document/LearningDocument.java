@@ -26,11 +26,11 @@ public class LearningDocument {
 
     private Integer pageCount;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "LONGTEXT")
     private String extractedText;
 
     /** 按页存储的文本 JSON，用于定位答案在 PDF 中的页码 */
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "LONGTEXT")
     private String pageTextsJson;
 
     @Enumerated(EnumType.STRING)

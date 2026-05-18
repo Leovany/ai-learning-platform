@@ -28,6 +28,7 @@ public class Quiz {
     @Column(nullable = false)
     private QuizStatus status = QuizStatus.PENDING;
 
+    @Column(columnDefinition = "LONGTEXT")
     private String errorMessage;
 
     @Column(nullable = false)

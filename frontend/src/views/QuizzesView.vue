@@ -94,7 +94,7 @@ const hasPendingTasks = computed(() =>
 
 const filteredQuizzes = computed(() => {
   let result = [...quizzes.value]
-  
+
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(
@@ -103,7 +103,7 @@ const filteredQuizzes = computed(() => {
         q.documentName.toLowerCase().includes(query),
     )
   }
-  
+
   if (statusFilter.value !== 'ALL') {
     if (statusFilter.value === 'ACTIVE') {
       result = result.filter((q) => q.status === 'PENDING' || q.status === 'GENERATING')
@@ -113,7 +113,7 @@ const filteredQuizzes = computed(() => {
       result = result.filter((q) => q.status === 'FAILED' || q.status === 'CANCELLED')
     }
   }
-  
+
   result.sort((a, b) => {
     switch (sortOrder.value) {
       case 'newest':
@@ -128,7 +128,7 @@ const filteredQuizzes = computed(() => {
         return 0
     }
   })
-  
+
   return result
 })
 
@@ -190,13 +190,13 @@ async function onExport(id: number, title: string) {
   try {
     const response = await exportQuiz(id)
     const contentType = response.headers['content-type']
-    
+
     if (contentType?.includes('application/json')) {
       const errorData = response.data
       ElMessage.error(errorData.message || '下载失败，请重试')
       return
     }
-    
+
     const blob = response.data
     const filename = title.replaceAll(/[^a-zA-Z0-9\u4e00-\u9fa5\-_\.]/g, '_') + '.md'
     const url = window.URL.createObjectURL(blob)
