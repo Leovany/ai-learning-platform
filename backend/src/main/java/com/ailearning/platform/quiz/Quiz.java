@@ -26,15 +26,26 @@ public class Quiz {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private QuizStatus status = QuizStatus.GENERATING;
+    private QuizStatus status = QuizStatus.PENDING;
+
+    private String errorMessage;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    private Integer progress;
+
+    private LocalDateTime estimatedCompletionTime;
+
+    private String taskToken;
 
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (progress == null) {
+            progress = 0;
         }
     }
 }

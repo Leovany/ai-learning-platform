@@ -9,7 +9,7 @@ export interface ApiResult<T = unknown> {
 
 const request = axios.create({
   baseURL: '/api',
-  timeout: 120000,
+  timeout: 300000,
 })
 
 request.interceptors.response.use(

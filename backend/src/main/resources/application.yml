@@ -51,4 +51,4 @@ app:
       default-model: ${QWEN_DEFAULT_MODEL:qwen-plus}
   quiz:
     default-count: ${QUIZ_DEFAULT_COUNT:10}
-    max-count: ${QUIZ_MAX_COUNT:30}
+    max-count: ${QUIZ_MAX_COUNT:50}

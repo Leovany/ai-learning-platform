@@ -38,6 +38,6 @@ public class AppProperties {
     @Data
     public static class Quiz {
         private int defaultCount = 10;
-        private int maxCount = 30;
+        private int maxCount = 50;
     }
 }

@@ -18,6 +18,9 @@ public class QuizVO {
     private String title;
     private Integer questionCount;
     private QuizStatus status;
+    private String errorMessage;
     private LocalDateTime createdAt;
+    private Integer progress;
+    private LocalDateTime estimatedCompletionTime;
     private List<QuestionVO> questions;
 }

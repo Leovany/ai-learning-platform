@@ -1,6 +1,6 @@
 import request, { getData } from '@/api/request'
 
-export type QuizStatus = 'GENERATING' | 'READY' | 'FAILED'
+export type QuizStatus = 'PENDING' | 'GENERATING' | 'READY' | 'FAILED' | 'CANCELLED'
 
 export interface QuestionVO {
   id: number
@@ -29,7 +29,10 @@ export interface QuizVO {
   title: string
   questionCount: number
   status: QuizStatus
+  errorMessage?: string
   createdAt: string
+  progress?: number
+  estimatedCompletionTime?: string
   questions?: QuestionVO[]
 }
 
@@ -43,6 +46,11 @@ export interface QuizAttemptVO {
 
 export type QuizDifficulty = 'easy' | 'medium' | 'hard'
 
+export interface QuizConfigVO {
+  defaultCount: number
+  maxCount: number
+}
+
 export interface SubmitQuizResult {
   attemptId: number
   quizId: number
@@ -52,6 +60,10 @@ export interface SubmitQuizResult {
   score: number
   total: number
   questions: QuestionVO[]
+}
+
+export function getQuizConfig() {
+  return getData<QuizConfigVO>(request.get('/quizzes/config'))
 }
 
 export function listQuizzes() {
@@ -64,6 +76,10 @@ export function getQuiz(id: number, includeAnswers = false) {
   )
 }
 
+export function getQuizStatus(id: number) {
+  return getData<QuizVO>(request.get(`/quizzes/${id}/status`))
+}
+
 export function generateQuiz(
   documentId: number,
   questionCount?: number,
@@ -72,6 +88,14 @@ export function generateQuiz(
   return getData<QuizVO>(
     request.post('/quizzes/generate', { documentId, questionCount, difficulty }),
   )
+}
+
+export function cancelQuiz(id: number) {
+  return getData<void>(request.post(`/quizzes/${id}/cancel`))
+}
+
+export function exportQuiz(id: number) {
+  return request.get(`/quizzes/${id}/export`, { responseType: 'blob' })
 }
 
 export function listQuizAttempts(quizId: number) {
@@ -93,18 +117,22 @@ export function submitQuiz(
 
 export function quizStatusLabel(status: QuizStatus): string {
   const map: Record<QuizStatus, string> = {
+    PENDING: '排队中',
     GENERATING: '生成中',
-    READY: '可答题',
-    FAILED: '生成失败',
+    READY: '已完成',
+    FAILED: '失败',
+    CANCELLED: '已取消',
   }
   return map[status]
 }
 
 export function quizStatusType(status: QuizStatus): 'success' | 'warning' | 'danger' | 'info' {
   const map: Record<QuizStatus, 'success' | 'warning' | 'danger' | 'info'> = {
-    GENERATING: 'info',
+    PENDING: 'info',
+    GENERATING: 'warning',
     READY: 'success',
     FAILED: 'danger',
+    CANCELLED: 'info',
   }
   return map[status]
 }

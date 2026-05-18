@@ -4,6 +4,7 @@ import com.ailearning.platform.config.AppProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 
 @SpringBootApplication
 @EnableConfigurationProperties(AppProperties.class)
+@EnableAsync
 public class AiLearningPlatformApplication {
 
     public static void main(String[] args) {

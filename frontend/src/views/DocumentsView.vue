@@ -94,7 +94,7 @@
       <p class="gen-hint">文档：{{ generateDoc?.fileName }}</p>
       <el-form label-width="100px">
         <el-form-item label="题目数量">
-          <el-input-number v-model="questionCount" :min="1" :max="30" />
+          <el-input-number v-model="questionCount" :min="1" :max="quizConfig?.maxCount ?? 50" />
         </el-form-item>
         <el-form-item label="难度">
           <el-select v-model="difficulty" style="width: 100%">
@@ -127,7 +127,7 @@ import {
   statusType,
   type DocumentVO,
 } from '@/api/document'
-import { generateQuiz, type QuizDifficulty } from '@/api/quiz'
+import { generateQuiz, getQuizConfig, type QuizDifficulty, type QuizConfigVO } from '@/api/quiz'
 
 const router = useRouter()
 const loading = ref(false)
@@ -145,6 +145,7 @@ const generateDoc = ref<DocumentVO | null>(null)
 const questionCount = ref(10)
 const difficulty = ref<QuizDifficulty>('medium')
 const generating = ref(false)
+const quizConfig = ref<QuizConfigVO | null>(null)
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('zh-CN')
@@ -156,6 +157,14 @@ async function loadDocuments() {
     documents.value = await listDocuments()
   } finally {
     loading.value = false
+  }
+}
+
+async function loadQuizConfig() {
+  try {
+    quizConfig.value = await getQuizConfig()
+  } catch (error) {
+    console.error('Failed to load quiz config:', error)
   }
 }
 
@@ -207,7 +216,7 @@ async function onReparse() {
 
 function openGenerate(row: DocumentVO) {
   generateDoc.value = row
-  questionCount.value = 10
+  questionCount.value = quizConfig.value?.defaultCount ?? 10
   generateVisible.value = true
 }
 
@@ -221,8 +230,11 @@ async function confirmGenerate() {
       difficulty.value,
     )
     generateVisible.value = false
-    ElMessage.success('考题生成成功')
-    router.push(`/quizzes/${quiz.id}/take`)
+    ElMessage.success('已提交生成任务，请在试卷列表查看进度')
+    router.push('/quizzes')
+  } catch (error) {
+    console.error('Generate quiz failed:', error)
+    ElMessage.error('生成任务提交失败，请重试')
   } finally {
     generating.value = false
   }
@@ -237,7 +249,10 @@ async function onDelete(row: DocumentVO) {
   await loadDocuments()
 }
 
-onMounted(loadDocuments)
+onMounted(() => {
+  loadDocuments()
+  loadQuizConfig()
+})
 </script>
 
 <style scoped>

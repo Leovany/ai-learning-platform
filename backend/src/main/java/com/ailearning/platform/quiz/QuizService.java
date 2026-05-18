@@ -9,10 +9,16 @@ import com.ailearning.platform.quiz.llm.LlmGeneratedQuestion;
 import com.ailearning.platform.quiz.llm.LlmQuizParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -22,6 +28,10 @@ public class QuizService {
 
     private static final int TEXT_MAX_LENGTH = 12000;
     private static final int MAX_LLM_RETRIES = 3;
+
+    @Autowired
+    @Lazy
+    private QuizService self;
 
     private final QuizRepository quizRepository;
     private final QuestionRepository questionRepository;
@@ -33,6 +43,8 @@ public class QuizService {
     private final DocumentPageService documentPageService;
     private final PdfPageLocator pdfPageLocator;
     private final AppProperties appProperties;
+
+    private final Map<Long, Boolean> cancelTokens = new ConcurrentHashMap<>();
 
     @Transactional
     public QuizVO generate(GenerateQuizRequest request) {
@@ -52,25 +64,155 @@ public class QuizService {
         quiz.setDocumentId(doc.getId());
         quiz.setTitle(doc.getFileName() + " - 练习题");
         quiz.setQuestionCount(count);
-        quiz.setStatus(QuizStatus.GENERATING);
+        quiz.setStatus(QuizStatus.PENDING);
+        quiz.setProgress(0);
+        quiz.setTaskToken(UUID.randomUUID().toString());
         quiz = quizRepository.save(quiz);
 
+        cancelTokens.put(quiz.getId(), false);
+
+        self.asyncGenerateQuiz(quiz.getId(), request.getQuestionCount(), request.getDifficulty());
+
+        return toSummaryVO(quiz, doc.getFileName());
+    }
+
+    @Async("taskExecutor")
+    public void asyncGenerateQuiz(Long quizId, Integer questionCount, String difficulty) {
+        log.info("Async task started for quizId: {}", quizId);
         try {
-            List<LlmGeneratedQuestion> generated = callLlmWithRetry(doc, count, request.getDifficulty());
-            saveQuestions(quiz.getId(), doc, generated);
-            quiz.setQuestionCount(generated.size());
-            quiz.setStatus(QuizStatus.READY);
-            quiz = quizRepository.save(quiz);
-            return toDetailVO(quiz, false);
+            Quiz quiz = quizRepository.findById(quizId).orElse(null);
+            if (quiz == null) {
+                return;
+            }
+
+            updateProgress(quizId, 5, "开始处理文档...");
+            quiz.setStatus(QuizStatus.GENERATING);
+            quiz.setEstimatedCompletionTime(LocalDateTime.now().plusMinutes(5));
+            quizRepository.save(quiz);
+
+            if (isCancelled(quizId)) {
+                markAsCancelled(quizId);
+                return;
+            }
+
+            LearningDocument doc = documentRepository.findById(quiz.getDocumentId()).orElse(null);
+            if (doc == null) {
+                updateQuizFailed(quizId, "文档不存在");
+                return;
+            }
+
+            updateProgress(quizId, 10, "解析文档内容...");
+
+            if (isCancelled(quizId)) {
+                markAsCancelled(quizId);
+                return;
+            }
+
+            int count = resolveQuestionCount(questionCount);
+
+            updateProgress(quizId, 20, "准备调用大模型...");
+
+            if (isCancelled(quizId)) {
+                markAsCancelled(quizId);
+                return;
+            }
+
+            updateProgress(quizId, 30, "调用大模型生成题目...");
+
+            List<LlmGeneratedQuestion> generated = callLlmWithRetry(doc, count, difficulty);
+
+            if (isCancelled(quizId)) {
+                markAsCancelled(quizId);
+                return;
+            }
+
+            updateProgress(quizId, 70, "保存题目数据...");
+
+            saveQuestions(quizId, doc, generated);
+
+            if (isCancelled(quizId)) {
+                markAsCancelled(quizId);
+                return;
+            }
+
+            updateProgress(quizId, 90, "完成任务...");
+
+            quiz = quizRepository.findById(quizId).orElse(null);
+            if (quiz != null) {
+                quiz.setQuestionCount(generated.size());
+                quiz.setStatus(QuizStatus.READY);
+                quiz.setProgress(100);
+                quiz.setEstimatedCompletionTime(LocalDateTime.now());
+                quizRepository.save(quiz);
+            }
+
+            cancelTokens.remove(quizId);
+            log.info("Quiz {} generated successfully with {} questions", quizId, generated.size());
+
         } catch (BusinessException e) {
-            quiz.setStatus(QuizStatus.FAILED);
-            quizRepository.save(quiz);
-            throw e;
+            updateQuizFailed(quizId, e.getMessage());
         } catch (Exception e) {
-            log.error("Generate quiz failed for document {}", doc.getId(), e);
-            quiz.setStatus(QuizStatus.FAILED);
-            quizRepository.save(quiz);
-            throw BusinessException.serviceUnavailable("生成考题失败: " + e.getMessage());
+            log.error("Generate quiz {} failed", quizId, e);
+            updateQuizFailed(quizId, "生成失败: " + e.getMessage());
+        } finally {
+            cancelTokens.remove(quizId);
+        }
+    }
+
+    private void updateProgress(Long quizId, int progress, String message) {
+        try {
+            Quiz quiz = quizRepository.findById(quizId).orElse(null);
+            if (quiz != null) {
+                quiz.setProgress(progress);
+                quiz.setEstimatedCompletionTime(LocalDateTime.now().plusMinutes(2));
+                quizRepository.save(quiz);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to update progress for quiz {}", quizId, e);
+        }
+    }
+
+    private boolean isCancelled(Long quizId) {
+        return Boolean.TRUE.equals(cancelTokens.get(quizId));
+    }
+
+    private void markAsCancelled(Long quizId) {
+        try {
+            Quiz quiz = quizRepository.findById(quizId).orElse(null);
+            if (quiz != null) {
+                quiz.setStatus(QuizStatus.CANCELLED);
+                quiz.setErrorMessage("任务已取消");
+                quizRepository.save(quiz);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to mark quiz {} as cancelled", quizId, e);
+        }
+    }
+
+    @Transactional
+    public void cancel(Long quizId) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> BusinessException.notFound("任务不存在"));
+        if (quiz.getStatus() != QuizStatus.PENDING && quiz.getStatus() != QuizStatus.GENERATING) {
+            throw BusinessException.badRequest("只有等待中或生成中的任务才能取消");
+        }
+        cancelTokens.put(quizId, true);
+        quiz.setStatus(QuizStatus.CANCELLED);
+        quiz.setErrorMessage("任务已取消");
+        quizRepository.save(quiz);
+    }
+
+    private void updateQuizFailed(Long quizId, String errorMessage) {
+        try {
+            Quiz quiz = quizRepository.findById(quizId).orElse(null);
+            if (quiz != null) {
+                quiz.setStatus(QuizStatus.FAILED);
+                quiz.setErrorMessage(errorMessage);
+                quiz.setProgress(0);
+                quizRepository.save(quiz);
+            }
+        } catch (Exception e) {
+            log.error("Failed to update quiz {} status to FAILED", quizId, e);
         }
     }
 
@@ -88,25 +230,38 @@ public class QuizService {
         Quiz quiz = findQuizOrThrow(id);
         if (quiz.getStatus() != QuizStatus.READY) {
             throw BusinessException.badRequest(
-                    quiz.getStatus() == QuizStatus.GENERATING ? "试卷正在生成中" : "试卷生成失败，请重新生成"
+                    quiz.getStatus() == QuizStatus.GENERATING ? "试卷正在生成中，请稍候..." : "试卷不可用"
             );
         }
         return toDetailVO(quiz, includeAnswers);
     }
 
+    @Transactional(readOnly = true)
+    public QuizVO getStatus(Long id) {
+        Quiz quiz = findQuizOrThrow(id);
+        String docName = documentRepository.findById(quiz.getDocumentId())
+                .map(LearningDocument::getFileName)
+                .orElse("");
+        return toSummaryVO(quiz, docName);
+    }
+
     @Transactional
     public void delete(Long id) {
         Quiz quiz = findQuizOrThrow(id);
+        cancelTokens.put(id, true);
         deleteQuizData(quiz.getId());
         quizRepository.delete(quiz);
+        cancelTokens.remove(id);
     }
 
     @Transactional
     public void deleteByDocumentId(Long documentId) {
         List<Quiz> quizzes = quizRepository.findByDocumentIdOrderByCreatedAtDesc(documentId);
         for (Quiz quiz : quizzes) {
+            cancelTokens.put(quiz.getId(), true);
             deleteQuizData(quiz.getId());
             quizRepository.delete(quiz);
+            cancelTokens.remove(quiz.getId());
         }
     }
 
@@ -187,6 +342,36 @@ public class QuizService {
                         .submittedAt(a.getSubmittedAt())
                         .build())
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public String exportQuiz(Long quizId) {
+        Quiz quiz = findQuizOrThrow(quizId);
+        if (quiz.getStatus() != QuizStatus.READY) {
+            throw BusinessException.badRequest("试卷尚未生成完成");
+        }
+        List<Question> questions = questionRepository.findByQuizIdOrderBySortOrderAsc(quizId);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ").append(quiz.getTitle()).append("\n\n");
+        sb.append("生成时间: ").append(quiz.getCreatedAt()).append("\n");
+        sb.append("题目数量: ").append(questions.size()).append("\n\n");
+
+        int index = 1;
+        for (Question q : questions) {
+            sb.append("## ").append(index++).append(". ").append(q.getStem()).append("\n\n");
+            sb.append("A. ").append(q.getOptionA()).append("\n");
+            sb.append("B. ").append(q.getOptionB()).append("\n");
+            sb.append("C. ").append(q.getOptionC()).append("\n");
+            sb.append("D. ").append(q.getOptionD()).append("\n\n");
+            sb.append("答案: ").append(q.getCorrectAnswer()).append("\n");
+            if (q.getExplanation() != null) {
+                sb.append("解析: ").append(q.getExplanation()).append("\n");
+            }
+            sb.append("\n---\n\n");
+        }
+
+        return sb.toString();
     }
 
     private List<LlmGeneratedQuestion> callLlmWithRetry(LearningDocument doc, int count, String difficulty) {
@@ -331,7 +516,10 @@ public class QuizService {
                 .title(quiz.getTitle())
                 .questionCount(quiz.getQuestionCount())
                 .status(quiz.getStatus())
+                .errorMessage(quiz.getErrorMessage())
                 .createdAt(quiz.getCreatedAt())
+                .progress(quiz.getProgress())
+                .estimatedCompletionTime(quiz.getEstimatedCompletionTime())
                 .questions(questionVOs)
                 .build();
     }
@@ -344,7 +532,10 @@ public class QuizService {
                 .title(quiz.getTitle())
                 .questionCount(quiz.getQuestionCount())
                 .status(quiz.getStatus())
+                .errorMessage(quiz.getErrorMessage())
                 .createdAt(quiz.getCreatedAt())
+                .progress(quiz.getProgress())
+                .estimatedCompletionTime(quiz.getEstimatedCompletionTime())
                 .build();
     }
 
