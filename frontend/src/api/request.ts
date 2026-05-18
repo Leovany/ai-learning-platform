@@ -14,10 +14,13 @@ const request = axios.create({
 
 request.interceptors.response.use(
   (response) => {
-    const result = response.data as ApiResult
-    if (result.code !== 0) {
-      ElMessage.error(result.message || '请求失败')
-      return Promise.reject(new Error(result.message))
+    const contentType = response.headers['content-type']
+    if (contentType?.includes('application/json')) {
+      const result = response.data as ApiResult
+      if (result.code !== 0) {
+        ElMessage.error(result.message || '请求失败')
+        return Promise.reject(new Error(result.message))
+      }
     }
     return response
   },

@@ -393,6 +393,9 @@ public class QuizService {
         sb.append("生成时间: ").append(quiz.getCreatedAt()).append("\n");
         sb.append("题目数量: ").append(questions.size()).append("\n\n");
 
+        sb.append("---\n\n");
+        sb.append("# 练习题\n\n");
+
         int index = 1;
         for (Question q : questions) {
             sb.append("## ").append(index++).append(". ").append(q.getStem()).append("\n\n");
@@ -400,11 +403,18 @@ public class QuizService {
             sb.append("B. ").append(q.getOptionB()).append("\n");
             sb.append("C. ").append(q.getOptionC()).append("\n");
             sb.append("D. ").append(q.getOptionD()).append("\n\n");
-            sb.append("答案: ").append(q.getCorrectAnswer()).append("\n");
+        }
+
+        sb.append("---\n\n");
+        sb.append("# 答案与解析\n\n");
+
+        index = 1;
+        for (Question q : questions) {
+            sb.append("## ").append(index++).append(". ").append(q.getCorrectAnswer()).append("\n\n");
             if (q.getExplanation() != null) {
-                sb.append("解析: ").append(q.getExplanation()).append("\n");
+                sb.append("解析: ").append(q.getExplanation()).append("\n\n");
             }
-            sb.append("\n---\n\n");
+            sb.append("---\n\n");
         }
 
         return sb.toString();
